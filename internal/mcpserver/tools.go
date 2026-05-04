@@ -27,10 +27,12 @@ func registerTools(s *server.MCPServer, reg *calendar.Registry) {
 		mcp.WithString("calendar_id", mcp.Description("Calendar ID (e.g. google:primary). Omit to get events from all calendars.")),
 		mcp.WithString("start", mcp.Required(), mcp.Description("Start datetime ISO8601 (e.g. 2026-04-05T00:00:00Z)")),
 		mcp.WithString("end", mcp.Required(), mcp.Description("End datetime ISO8601 (e.g. 2026-04-06T00:00:00Z)")),
+		mcp.WithString("timezone", mcp.Description("IANA timezone name (e.g. \"America/New_York\", \"Europe/London\"). When set, timed events' start/end are returned in this timezone. All-day events are left as UTC midnight so their date is preserved.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		calID := req.GetString("calendar_id", "")
 		startStr := req.GetString("start", "")
 		endStr := req.GetString("end", "")
+		tzName := req.GetString("timezone", "")
 
 		start, err := time.Parse(time.RFC3339, startStr)
 		if err != nil {
@@ -41,10 +43,29 @@ func registerTools(s *server.MCPServer, reg *calendar.Registry) {
 			return mcp.NewToolResultError("invalid end: " + err.Error()), nil
 		}
 
+		var loc *time.Location
+		if tzName != "" {
+			loc, err = time.LoadLocation(tzName)
+			if err != nil {
+				return mcp.NewToolResultError("invalid timezone: " + err.Error()), nil
+			}
+		}
+
 		events, err := reg.GetEvents(ctx, calID, start, end)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
+
+		if loc != nil {
+			for i := range events {
+				if events[i].AllDay {
+					continue
+				}
+				events[i].Start = events[i].Start.In(loc)
+				events[i].End = events[i].End.In(loc)
+			}
+		}
+
 		return jsonResult(events)
 	})
 
