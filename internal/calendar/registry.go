@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -121,6 +122,9 @@ func (r *Registry) GetEvents(ctx context.Context, calendarID string, start, end 
 		}
 		all = append(all, res.events...)
 	}
+	sort.SliceStable(all, func(i, j int) bool {
+		return all[i].Start.Before(all[j].Start)
+	})
 	return all, nil
 }
 
